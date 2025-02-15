@@ -1,0 +1,271 @@
+<!-- templates/game.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uno Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .game-status {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .uno-card {
+            display: inline-block;
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        .uno-card[data-color="r"] {
+            background-color: #ff5555;
+        }
+
+        .uno-card[data-color="b"] {
+            background-color: #3c66da;
+        }
+
+        .uno-card[data-color="g"] {
+            background-color: #55aa55;
+        }
+
+        .uno-card[data-color="y"] {
+            background-color: #ffaa00;
+        }
+
+        .uno-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .hand {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .played-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #error-message {
+            color: red;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="error-message"></div>
+    <div id="game-container" style="display: none;">
+        <div class="card">
+            <h2>Game Status</h2>
+            <div class="game-status">
+                <div>Current Player: <span id="current-player">-</span></div>
+                <div>Players: <span id="num-players">-</span></div>
+                <div>Cards per Player: <span id="cards-per-player">-</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Target Card</h2>
+            <div id="target-card"></div>
+        </div>
+
+        <div class="card">
+            <h2>Your Hand</h2>
+            <div id="hand" class="hand"></div>
+            <button id="draw-card" disabled>Draw Card</button>
+        </div>
+
+        <div class="card">
+            <h2>Recently Played Cards</h2>
+            <div id="played-cards" class="played-cards"></div>
+        </div>
+    </div>
+
+    <button id="create-game">Create New Gameg</button>
+
+    <script>
+        let gameId = null;
+        let playerId = null;
+        let ws = null;
+
+        document.getElementById('create-game').addEventListener('click', createGame);
+
+        async function getOrCreateGameId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const gameId = urlParams.get('gameId');
+
+            if (gameId) {
+                console.log("game id",  gameId);
+                return gameId;
+            }
+
+            const response = await fetch('/game/create?num_players=2', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            return data.game_id;
+        }
+
+        async function createGame() {
+            try {
+                gameId = await getOrCreateGameId();
+
+                const joinResponse = await fetch(`/game/${gameId}/join?player_type=human`, {
+                    method: 'POST'
+                });
+                const joinData = await joinResponse.json();
+                console.log(joinData);
+                playerId = joinData.player_id;
+
+                console.log('Player ID is', playerId);
+
+                document.getElementById('game-container').style.display = 'block';
+                document.getElementById('create-game').style.display = 'none';
+
+                connectWebSocket();
+            } catch (error) {
+                showError('Failed to create game');
+            }
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/${gameId}/${playerId}`);
+
+            ws.onopen = (event) => {
+                console.log("connected to server!", event);
+
+                // updateGameState(data);
+            }
+
+            ws.onmessage = (event) => {
+                console.log("got event", event);
+                const data = JSON.parse(event.data);
+                if (data.type === 'game_over') {
+                    alert(`Game Over! Winner is ${data.winner}`);
+                    return;
+                }
+                if (data.type === 'error') {
+                    alert(data.message);
+                    return;
+                }
+                updateGameState(data);
+            };
+
+            ws.onerror = (error) => {
+                showError('WebSocket error occurred');
+            };
+        }
+
+        function updateGameState(state) {
+            console.log('got update in game status', state);
+            document.getElementById('current-player').textContent = state.current_player;
+            document.getElementById('num-players').textContent = state.num_players;
+            document.getElementById('cards-per-player').textContent = state.num_cards.join(', ');
+
+            // Update target card
+            const targetCard = document.getElementById('target-card');
+            targetCard.innerHTML = '';
+            targetCard.appendChild(createCardElement(state.target));
+
+            // Update hand
+            const hand = document.getElementById('hand');
+            hand.innerHTML = '';
+            state.hand.forEach(card => {
+                const cardElement = createCardElement(card);
+                cardElement.onclick = () => playCard(card);
+                cardElement.className = `uno-card ${state.legal_actions.includes(card) ? '' : 'disabled'}`;
+                hand.appendChild(cardElement);
+            });
+
+            // Update draw button
+            const drawButton = document.getElementById('draw-card');
+            drawButton.disabled = !state.legal_actions.includes('draw');
+
+            // Update played cards
+            const playedCards = document.getElementById('played-cards');
+            playedCards.innerHTML = '';
+            state.played_cards.slice(-5).forEach(card => {
+                playedCards.appendChild(createCardElement(card));
+            });
+        }
+
+        function createCardElement(card) {
+            const div = document.createElement('div');
+            div.className = 'uno-card';
+            div.textContent = card;
+            div.dataset.color = card[0];
+            return div;
+        }
+
+        function playCard(card) {
+            if (!ws) return;
+            ws.send(JSON.stringify({
+                action: card,
+                game_id: gameId,
+                player_id: playerId
+            }));
+        }
+
+        document.getElementById('draw-card').onclick = () => {
+            if (!ws) return;
+            ws.send(JSON.stringify({
+                action: 'draw',
+                game_id: gameId,
+                player_id: playerId
+            }));
+        };
+
+        function showError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            setTimeout(() => {
+                errorElement.textContent = '';
+            }, 5000);
+        }
+    </script>
+</body>
+
+</html>
