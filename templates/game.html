@@ -138,7 +138,7 @@
             const gameId = urlParams.get('gameId');
 
             if (gameId) {
-                console.log("game id",  gameId);
+                console.log("game id", gameId);
                 return gameId;
             }
 
@@ -172,7 +172,9 @@
         }
 
         function connectWebSocket() {
-            ws = new WebSocket(`ws://${window.location.host}/ws/${gameId}/${playerId}`);
+            let websocketProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            let websocketURL = `${websocketProtocol}//${window.location.host}/ws/${gameId}/${playerId}`;
+            ws = new WebSocket(websocketURL);
 
             ws.onopen = (event) => {
                 console.log("connected to server!", event);
