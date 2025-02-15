@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Request
+from fastapi import FastAPI, HTTPException, WebSocket, Request, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -11,12 +11,14 @@ import traceback
 
 app = FastAPI()
 
+router = APIRouter(prefix="/uno")
+
 # Create a directory for static files and templates if they don't exist
 Path("static").mkdir(exist_ok=True)
 Path("templates").mkdir(exist_ok=True)
 
 # Mount static files directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+router.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # Store active games
@@ -28,12 +30,12 @@ def create_game_env() -> Any:
     return env
 
 
-@app.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
 async def get_game(request: Request):
     return templates.TemplateResponse("game.html", {"request": request})
 
 
-@app.post("/game/create")
+@router.post("/game/create")
 async def create_game(num_players: int = 2):
     # if num_players < 2 or num_players > 4:
     #     raise HTTPException(status_code=400, detail="Number of players must be between 2 and 4")
@@ -59,7 +61,7 @@ async def create_game(num_players: int = 2):
     return {"game_id": game_id}
 
 
-@app.post("/game/{game_id}/join")
+@router.post("/game/{game_id}/join")
 async def join_game(game_id: int, player_type: str):
     if game_id not in games:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -79,7 +81,7 @@ async def join_game(game_id: int, player_type: str):
     return {"player_id": player_id}
 
 
-@app.websocket("/ws/{game_id}/{player_id}")
+@router.websocket("/ws/{game_id}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, player_id: int):
     await websocket.accept()
 
@@ -177,7 +179,9 @@ async def send_error(game, msg: str, target_player_id: int):
             await ws.send_json({"type": "error", "message": msg})
 
 
+app.include_router(router)
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001) # localhost:8001/uno
