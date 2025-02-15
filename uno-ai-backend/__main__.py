@@ -11,7 +11,7 @@ import traceback
 
 app = FastAPI()
 
-router = APIRouter(prefix="/uno")
+router = APIRouter()
 
 # Create a directory for static files and templates if they don't exist
 Path("static").mkdir(exist_ok=True)
