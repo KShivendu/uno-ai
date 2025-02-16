@@ -83,6 +83,26 @@
             cursor: pointer;
         }
 
+        input {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+        }
+
+        #start-game-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 90vh;
+        }
+
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
@@ -96,6 +116,10 @@
 </head>
 
 <body>
+    <div id="start-game-container">
+        <input type="text" id="game-id" aria-label="Game id" placeholder="Game id (Optional)">
+        <button id="create-game">Start Game</button>
+    </div>
     <div id="error-message"></div>
     <div id="game-container" style="display: none;">
         <div class="card">
@@ -124,14 +148,17 @@
         </div>
     </div>
 
-    <button id="create-game">Create New Gameg</button>
-
     <script>
         let gameId = null;
         let playerId = null;
         let ws = null;
 
         document.getElementById('create-game').addEventListener('click', createGame);
+        document.getElementById('game-id').addEventListener('keydown', (e) => {
+            if (e.keyCode == 13) {
+                createGame();
+            }
+        })
 
         async function getOrCreateGameId() {
             const urlParams = new URLSearchParams(window.location.search);
@@ -163,7 +190,7 @@
                 console.log('Player ID is', playerId);
 
                 document.getElementById('game-container').style.display = 'block';
-                document.getElementById('create-game').style.display = 'none';
+                document.getElementById('start-game-container').style.display = 'none';
 
                 connectWebSocket();
             } catch (error) {
